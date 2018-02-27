@@ -535,4 +535,7 @@ Valid from:</comment>
   <data name="InvalidRepositoryCounterSignature" xml:space="preserve">
     <value>The repository countersignature is invalid.</value>
   </data>
+  <data name="SigningCannotBeDoneInPlace" xml:space="preserve">
+    <value>PackagePath and OutputPath should be different. Package signing cannot be done in place.</value>
+  </data>
 </root>
