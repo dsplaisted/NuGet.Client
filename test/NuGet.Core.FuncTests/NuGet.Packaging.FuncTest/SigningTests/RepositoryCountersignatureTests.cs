@@ -147,7 +147,6 @@ namespace NuGet.Packaging.FuncTest
                     certificate,
                     HashAlgorithmName.SHA256,
                     HashAlgorithmName.SHA256,
-                    SignaturePlacement.Countersignature,
                     v3ServiceIndexUrl,
                     packageOwners);
                 var cmsSigner = SigningUtility.CreateCmsSigner(request, NullLogger.Instance);
