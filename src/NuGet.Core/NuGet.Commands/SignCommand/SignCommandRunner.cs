@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using NuGet.Common;
+using NuGet.Packaging;
 using NuGet.Packaging.Signing;
 using NuGet.Protocol;
 
@@ -129,27 +130,45 @@ namespace NuGet.Commands
             string packagePath,
             string outputPath,
             ILogger logger,
-            bool Overwrite,
+            bool overwrite,
             ISignatureProvider signatureProvider,
             SignPackageRequest request,
             CancellationToken token)
         {
-            // For overwrite we need to first remove the signature and then sign the unsigned package
-            if (Overwrite)
+            var isRepositoryCounterSignature = false;
+            var signaturePlacement = SignaturePlacement.PrimarySignature;
+
+            if (request.SignatureType == SignatureType.Repository)
+            {
+                signaturePlacement = await GetAvailableSignaturePlacementAsync(packagePath, token);
+                isRepositoryCounterSignature = signaturePlacement == SignaturePlacement.Countersignature;
+            }
+
+            // For overwrite and countersignatures we need to first remove the signature and then sign the unsigned package
+            if (overwrite || isRepositoryCounterSignature)
             {
                 var originalPackageCopyPath = CopyPackage(packagePath);
 
                 await RemoveSignatureAsync(logger, signatureProvider, packagePath, originalPackageCopyPath, token);
-                await AddSignatureAndUpdatePackageAsync(logger, signatureProvider, request, originalPackageCopyPath, outputPath, token);
+                await AddSignatureAndUpdatePackageAsync(logger, signatureProvider, request, originalPackageCopyPath, outputPath, signaturePlacement, token);
 
                 FileUtility.Delete(originalPackageCopyPath);
             }
             else
             {
-                await AddSignatureAndUpdatePackageAsync(logger, signatureProvider, request, packagePath, outputPath, token);
+                await AddSignatureAndUpdatePackageAsync(logger, signatureProvider, request, packagePath, outputPath, signaturePlacement, token);
             }
 
             return 0;
+        }
+
+        private async Task<SignaturePlacement> GetAvailableSignaturePlacementAsync(string packagePath, CancellationToken token)
+        {
+            using (var packageReadStream = File.OpenRead(packagePath))
+            using (var package = new PackageArchiveReader(packageReadStream))
+            {
+                return await package.GetAvailableSignaturePlacementAsync(token);
+            }
         }
 
         private static async Task AddSignatureAndUpdatePackageAsync(
@@ -158,6 +177,7 @@ namespace NuGet.Commands
             SignPackageRequest request,
             string packagePath,
             string outputPath,
+            SignaturePlacement signaturePlacement,
             CancellationToken token)
         {
             var originalPackageCopyPath = CopyPackage(packagePath);
@@ -166,7 +186,7 @@ namespace NuGet.Commands
             using (var packageWriteStream = File.Open(originalPackageCopyPath, FileMode.Open))
             using (var package = new SignedPackageArchive(packageReadStream, packageWriteStream))
             {
-                var signer = new Signer(package, signatureProvider);
+                var signer = new Signer(package, signatureProvider, signaturePlacement);
                 await signer.SignAsync(request, logger, token);
             }
 
